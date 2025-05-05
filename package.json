@@ -1,0 +1,33 @@
+{
+  "name": "social-automation",
+  "version": "1.0.0",
+  "description": "AI-powered social media content generation and automation tool",
+  "main": "examples/generate-and-post.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "verify-linkedin": "node src/scripts/verify-linkedin-config.js",
+    "test-token": "node src/scripts/test-linkedin-token.js",
+    "test-post": "node src/scripts/test-linkedin-post.js",
+    "generate": "node examples/generate-text-post.js"
+  },
+  "keywords": [
+    "linkedin",
+    "ai",
+    "automation",
+    "social-media",
+    "content-generation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.7",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1",
+    "express": "^4.18.2",
+    "node-cron": "^3.0.3",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {}
+}
