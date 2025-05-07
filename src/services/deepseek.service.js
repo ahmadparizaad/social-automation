@@ -41,6 +41,25 @@ class DeepseekService {
         return this.generateMockContent(prompt);
       }
 
+      // Log a portion of the API key for debugging (securely)
+      const keyPreview = apiKey ? `${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}` : 'undefined';
+      logger.info(`Using API key: ${keyPreview}`);
+      logger.info(`Calling OpenRouter API at: ${this.apiUrl}/chat/completions`);
+
+      // Ensure all headers are properly formatted
+      const headers = {
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://social-automation-app.com',
+        'X-Title': 'Social Automation Tool',
+        'Content-Type': 'application/json'
+      };
+
+      // Log request details (excluding full API key)
+      logger.info(`Request headers: ${JSON.stringify({
+        ...headers,
+        "Authorization": `Bearer ${keyPreview}`
+      })}`);
+
       const response = await axios.post(
         `${this.apiUrl}/chat/completions`,
         {
@@ -67,12 +86,7 @@ Your posts should:
           max_tokens: 800
         },
         {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'HTTP-Referer': 'https://social-automation-app.com',
-            'X-Title': 'Social Automation Tool',
-            'Content-Type': 'application/json'
-          }
+          headers: headers
         }
       );
 

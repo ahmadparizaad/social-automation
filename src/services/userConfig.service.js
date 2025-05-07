@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { logger } = require('../utils/logger');
+const { hasPersistentFileSystem } = require('../utils/vercel-environment');
 
 /**
  * Service to manage user configuration for post generation
@@ -8,19 +9,20 @@ const { logger } = require('../utils/logger');
 class UserConfigService {
   constructor() {
     this.configPath = path.join(process.cwd(), 'data', 'userConfig.json');
+    this.inMemoryConfig = null;
     this.defaultConfig = {
-      professionalBackground: 'Web Developer',
-      targetAudience: 'Web developers and tech professionals',
-      tone: 'Professional but conversational',
-      postLength: 'Medium (1500-2000 characters)',
+      professionalBackground: "Fullstack Developer | AI Specialist",
+      targetAudience: "Web developers, engineers, tech enthusiasts and tech professionals",
+      tone: "Professional but conversational",
+      postLength: "Medium (800-2000 characters)",
       topics: [
-        'React.js',
-        'Next.js',
-        'Backend Development',
-        'AI Tools for Development',
-        'Web Development Best Practices'
+        "React.js",
+        "Next.js",
+        "Backend Development",
+        "AI Tools for Development",
+        "Web Development Best Practices"
       ],
-      postFrequency: 'Weekly',
+      postFrequency: "Daily",
       lastUpdated: new Date().toISOString()
     };
   }
@@ -29,6 +31,9 @@ class UserConfigService {
    * Ensure the data directory exists
    */
   async ensureDataDirectory() {
+    // Skip filesystem operations in serverless environment
+    if (!hasPersistentFileSystem()) return;
+
     const dataDir = path.join(process.cwd(), 'data');
     try {
       await fs.mkdir(dataDir, { recursive: true });
@@ -45,6 +50,28 @@ class UserConfigService {
    */
   async getUserConfig() {
     try {
+      // In serverless environment, use in-memory or environment defaults
+      if (!hasPersistentFileSystem()) {
+        if (this.inMemoryConfig) {
+          return this.inMemoryConfig;
+        }
+        
+        // Try to get from environment variable if available
+        if (process.env.USER_CONFIG) {
+          try {
+            this.inMemoryConfig = JSON.parse(process.env.USER_CONFIG);
+            return this.inMemoryConfig;
+          } catch (e) {
+            logger.warn('Failed to parse USER_CONFIG environment variable, using default config');
+          }
+        }
+        
+        // Use default config
+        this.inMemoryConfig = this.defaultConfig;
+        return this.defaultConfig;
+      }
+
+      // For local environment, use file system
       await this.ensureDataDirectory();
       
       try {
@@ -73,6 +100,19 @@ class UserConfigService {
    */
   async updateUserConfig(newConfig) {
     try {
+      // In serverless environment, use in-memory only
+      if (!hasPersistentFileSystem()) {
+        this.inMemoryConfig = {
+          ...this.defaultConfig,
+          ...newConfig,
+          lastUpdated: new Date().toISOString()
+        };
+        
+        logger.info('User configuration updated in memory (serverless environment)');
+        return this.inMemoryConfig;
+      }
+
+      // For local environment, update the file
       await this.ensureDataDirectory();
       
       // Merge with existing config if available
@@ -109,4 +149,4 @@ class UserConfigService {
   }
 }
 
-module.exports = new UserConfigService(); 
+module.exports = new UserConfigService();

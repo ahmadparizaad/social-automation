@@ -3,12 +3,22 @@ const { logger } = require('../utils/logger');
 const postService = require('./post.service');
 const userConfigService = require('./userConfig.service');
 const linkedinService = require('./linkedin.service');
+const { isVercelEnvironment } = require('../utils/vercel-environment');
+
 /**
  * Service to handle scheduled post generation and publishing
  */
 class SchedulerService {
   constructor() {
     this.scheduledTasks = {};
+    this.isServerless = isVercelEnvironment();
+
+    // Log whether we're in serverless mode
+    if (this.isServerless) {
+      logger.info('Scheduler service in serverless mode - using Vercel cron');
+    } else {
+      logger.info('Scheduler service in standard mode - using node-cron');
+    }
   }
 
   /**
@@ -17,6 +27,12 @@ class SchedulerService {
   async initialize() {
     try {
       logger.info('Initializing scheduler service');
+      
+      // Skip scheduling in serverless environment - will use Vercel cron
+      if (this.isServerless) {
+        logger.info('Skipping cron scheduling in serverless environment');
+        return;
+      }
       
       // Get user configuration
       const userConfig = await userConfigService.getUserConfig();
@@ -38,6 +54,12 @@ class SchedulerService {
    * @param {string} frequency - Frequency of posts (Daily, Weekly, BiWeekly, Monthly)
    */
   async setSchedule(frequency) {
+    // Skip in serverless environment
+    if (this.isServerless) {
+      logger.info('Cannot set local schedule in serverless environment - use Vercel cron');
+      return;
+    }
+    
     // Clear any existing scheduled tasks
     this.clearAllSchedules();
     
@@ -46,7 +68,7 @@ class SchedulerService {
     // Set schedule based on frequency
     switch (frequency.toLowerCase()) {
       case 'daily':
-        cronSchedule = '15 08 * * *'; // Every day at 11:15 AM
+        cronSchedule = '15 11 * * *'; // Every day at 11:15 AM
         break;
       case 'weekly':
         cronSchedule = '0 9 * * 1'; // Every Monday at 9 AM
@@ -64,29 +86,7 @@ class SchedulerService {
     // Schedule the automated post generation and publishing
     this.scheduledTasks.postGeneration = cron.schedule(cronSchedule, async () => {
       try {
-        logger.info('Running scheduled post generation');
-        
-        // Get the latest user configuration
-        const userConfig = await userConfigService.getUserConfig();
-        
-        // Select a random topic from the user's preferred topics
-        const randomTopic = userConfig.topics[Math.floor(Math.random() * userConfig.topics.length)];
-        
-        // Generate the post
-        const postDraft = await postService.generatePost(randomTopic, userConfig);
-        
-        logger.info(`Scheduled post generated on topic: ${randomTopic}`);
-        
-        // In a real implementation, you might want to:
-        // 1. Save the draft to a database
-        // 2. Notify the user for approval
-        // 3. Publish once approved
-        
-        // For this example, we'll auto-publish in test mode
-        if (process.env.AUTO_PUBLISH === 'true') {
-          await linkedinService.publishPost(postDraft);
-          logger.info('Scheduled post published automatically');
-        }
+        await this.generateAndPublishPost();
       } catch (error) {
         logger.error(`Error in scheduled post generation: ${error.message}`);
       }
@@ -96,9 +96,48 @@ class SchedulerService {
   }
 
   /**
+   * Generate and publish a post based on user configuration
+   * This method can be called by both node-cron and Vercel cron
+   */
+  async generateAndPublishPost() {
+    try {
+      logger.info('Running post generation');
+      
+      // Get the latest user configuration
+      const userConfig = await userConfigService.getUserConfig();
+      
+      // Select a random topic from the user's preferred topics
+      const randomTopic = userConfig.topics[Math.floor(Math.random() * userConfig.topics.length)];
+      
+      // Generate the post
+      const postDraft = await postService.generatePost(randomTopic, userConfig);
+      
+      logger.info(`Post generated on topic: ${randomTopic}`);
+      
+      // Publish if auto-publish is enabled
+      if (process.env.AUTO_PUBLISH === 'true') {
+        const result = await linkedinService.publishPost(postDraft);
+        logger.info('Post published automatically', { postId: result.id });
+        return result;
+      } else {
+        logger.info('Post generated but not published (AUTO_PUBLISH disabled)');
+        return { published: false, draft: postDraft };
+      }
+    } catch (error) {
+      logger.error(`Error in post generation: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
    * Clear all scheduled tasks
    */
   clearAllSchedules() {
+    // Skip in serverless environment
+    if (this.isServerless) {
+      return;
+    }
+    
     Object.values(this.scheduledTasks).forEach(task => {
       if (task && typeof task.stop === 'function') {
         task.stop();
